@@ -89,7 +89,8 @@ def cmd_data_sources(args: argparse.Namespace, ctx: AppContext) -> int:
 # ---------------------------------------------------------------------------- forecasting
 def _forecast_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("--no-sync", action="store_true", help="Do not fetch new candles first")
-    p.add_argument("--slot", help="Slot timestamp (UTC, aligned to the interval). Default: current slot")
+    p.add_argument("--slot", help="Slot timestamp (UTC, aligned to the interval). Default: current slot. "
+                   "Must be within scheduler.grace_seconds of now")
 
 
 @command("forecast", "Generate (and store) the forecast for the current slot", _forecast_args)
@@ -103,9 +104,9 @@ def cmd_forecast(args: argparse.Namespace, ctx: AppContext) -> int:
         IngestionService(ctx).sync_all(now)
     svc = ForecastService(ctx, llm_reviewer=_llm_reviewer(ctx))
     slot = to_epoch_min(parse_ts(args.slot)) if args.slot else svc.current_slot(now)
-    # A manual run is allowed outside the scheduler grace window, but is still stamped with the
-    # real creation time and starts evaluation from that time - it is never back-dated.
-    out = svc.run_slot(slot, now, enforce_grace=False)
+    # Manual runs obey the same grace window as the scheduler: a slot that has passed is
+    # recorded as missed rather than forecast after the fact.
+    out = svc.run_slot(slot, now)
     _print(out.as_dict())
     return 0
 
