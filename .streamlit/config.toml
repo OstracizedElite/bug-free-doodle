@@ -1,0 +1,6 @@
+[theme]
+# Accent colour from the dashboard palette (blue); red/green are reserved for polarity/status.
+primaryColor = "#2a78d6"
+
+[browser]
+gatherUsageStats = false
