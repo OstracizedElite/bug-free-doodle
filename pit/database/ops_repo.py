@@ -162,3 +162,10 @@ class OpsRepository:
 
     def missed_slots(self, limit: int = 200) -> list[dict[str, Any]]:
         return self.db.query("SELECT * FROM missed_slots ORDER BY slot_min DESC LIMIT ?", (limit,))
+
+    # ------------------------------------------------------------------ maintenance
+    def prune_job_runs(self, older_than_iso: str) -> int:
+        """Delete routine scheduler job logs older than the cutoff (forecast data is never pruned)."""
+        with self.db.connect() as conn:
+            cur = conn.execute("DELETE FROM scheduler_runs WHERE started_at < ?", (older_than_iso,))
+            return cur.rowcount

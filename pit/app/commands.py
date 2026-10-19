@@ -274,3 +274,52 @@ def cmd_llm_preview(args: argparse.Namespace, ctx: AppContext) -> int:
             "user": P.render_user_message(payload), "schema": JSON_SCHEMA,
             "llm_enabled": ctx.settings.llm.enabled, "model": ctx.settings.llm.model})
     return 0
+
+
+# ---------------------------------------------------------------------------- operations
+def _run_args(p: argparse.ArgumentParser) -> None:
+    p.add_argument("--once", action="store_true", help="Run start-up plus a single tick, then exit (cron mode)")
+    p.add_argument("--no-lock", action="store_true", help="Do not take the single-instance lock")
+
+
+@command("run", "Run the scheduler: ingest, forecast every slot, evaluate, paper-trade (unattended)", _run_args)
+def cmd_run(args: argparse.Namespace, ctx: AppContext) -> int:
+    from pit.scheduler.runner import Scheduler, SchedulerLockError
+
+    sched = Scheduler(ctx, use_lock=not args.no_lock)
+    try:
+        if args.once:
+            sched.startup()
+            report = sched.tick()
+            sched.shutdown()
+            _print({"ran": report.ran, "errors": report.errors, "forecast": report.forecast})
+            return 1 if report.errors else 0
+        print(f"PIT scheduler running (provider={ctx.settings.data.provider}, "
+              f"config={ctx.settings.forecast_config_version}). Ctrl+C to stop.", flush=True)
+        sched.run_forever()
+    except SchedulerLockError as exc:
+        print(f"error: {exc}")
+        return 2
+    return 0
+
+
+def _backup_args(p: argparse.ArgumentParser) -> None:
+    p.add_argument("--to", help="Destination file (default: var/backups/pit-<timestamp>.db)")
+
+
+@command("backup", "Consistent online backup of the SQLite database", _backup_args)
+def cmd_backup(args: argparse.Namespace, ctx: AppContext) -> int:
+    import sqlite3
+    from pathlib import Path
+
+    dest = Path(args.to) if args.to else ctx.settings.resolve_path(
+        f"var/backups/pit-{utcnow().strftime('%Y%m%dT%H%M%SZ')}.db")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    src = sqlite3.connect(str(ctx.db.path))
+    dst = sqlite3.connect(str(dest))
+    with dst:
+        src.backup(dst)
+    src.close()
+    dst.close()
+    _print({"backup": str(dest), "bytes": dest.stat().st_size})
+    return 0
