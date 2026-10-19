@@ -84,3 +84,35 @@ def cmd_import_csv(args: argparse.Namespace, ctx: AppContext) -> int:
 def cmd_data_sources(args: argparse.Namespace, ctx: AppContext) -> int:
     _print({"sources": ctx.candles.sources(), "recent_gaps": ctx.candles.gaps(limit=20)})
     return 0
+
+
+# ---------------------------------------------------------------------------- forecasting
+def _forecast_args(p: argparse.ArgumentParser) -> None:
+    p.add_argument("--no-sync", action="store_true", help="Do not fetch new candles first")
+    p.add_argument("--slot", help="Slot timestamp (UTC, aligned to the interval). Default: current slot")
+
+
+@command("forecast", "Generate (and store) the forecast for the current slot", _forecast_args)
+def cmd_forecast(args: argparse.Namespace, ctx: AppContext) -> int:
+    from pit.common.timeutils import to_epoch_min
+    from pit.data.ingestion import IngestionService
+    from pit.forecasting.service import ForecastService
+
+    now = utcnow()
+    if not args.no_sync:
+        IngestionService(ctx).sync_all(now)
+    svc = ForecastService(ctx, llm_reviewer=_llm_reviewer(ctx))
+    slot = to_epoch_min(parse_ts(args.slot)) if args.slot else svc.current_slot(now)
+    # A manual run is allowed outside the scheduler grace window, but is still stamped with the
+    # real creation time and starts evaluation from that time - it is never back-dated.
+    out = svc.run_slot(slot, now, enforce_grace=False)
+    _print(out.as_dict())
+    return 0
+
+
+def _llm_reviewer(ctx: AppContext):
+    if not ctx.settings.llm.enabled:
+        return None
+    from pit.forecasting.llm.reviewer import LLMReviewer
+
+    return LLMReviewer.from_context(ctx)

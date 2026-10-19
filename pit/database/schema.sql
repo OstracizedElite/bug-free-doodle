@@ -180,7 +180,7 @@ CREATE TABLE IF NOT EXISTS forecasts (
     llm_model            TEXT,
     llm_prompt_version   TEXT,
     llm_call_id          TEXT,
-    snapshot_id          TEXT REFERENCES feature_snapshots(snapshot_id),
+    snapshot_id          TEXT,                  -- feature_snapshots row (stored for live; replayable for backtests)
     content_hash         TEXT    NOT NULL,      -- sha256 of the canonical record (tamper evidence)
     UNIQUE (origin, run_id, instrument, slot_min, horizon_minutes, model_type, config_version)
 );
