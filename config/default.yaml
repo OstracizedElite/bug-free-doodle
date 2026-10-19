@@ -25,17 +25,24 @@ data:
     max_abs_1m_return: 0.03     # |log return| above this in one minute => candle flagged 'suspect'
     max_spread_fraction: 0.01   # spread / price above this => candle flagged 'suspect'
     suspect_lookback_minutes: 30  # any suspect candle this recent => forecast WAIT (data_quality)
+  fx_default_spread: 0.0002     # AUD/USD equivalent of default_spread
+  fx_sanity:                    # bounds for the FX conversion pair
+    min_price: 0.2
+    max_price: 5.0
+    max_abs_1m_return: 0.02
+    max_spread_fraction: 0.01
+    suspect_lookback_minutes: 30
 
 providers:
   synthetic:
     seed: 20240101
     anchor: "2025-06-01T00:00:00Z"   # deterministic path starts here; must precede any requested data
     start_price: 3300.0
-    annual_vol: 0.16
+    annual_vol: 0.14
     vol_of_vol: 0.35                 # stochastic volatility intensity
     vol_persistence_minutes: 720     # half-life scale of volatility regimes
-    drift_persistence_minutes: 240   # half-life scale of trend regimes
-    drift_strength: 0.25             # trend drift as a fraction of per-minute volatility
+    drift_persistence_minutes: 60    # half-life scale of trend regimes
+    drift_strength: 0.10             # trend drift as a fraction of per-minute volatility
     base_spread: 0.25
     missing_rate: 0.0                # probability of dropping a minute (tests gap handling)
     fx_start_rate: 0.655             # synthetic AUD/USD

@@ -71,17 +71,19 @@ class DataConfig(_Model):
     backfill_chunk_minutes: int = Field(5000, ge=100)
     default_spread: float = Field(0.30, gt=0)
     sanity: SanityConfig = SanityConfig()
+    fx_default_spread: float = Field(0.0002, gt=0)
+    fx_sanity: SanityConfig = SanityConfig(min_price=0.2, max_price=5.0, max_abs_1m_return=0.02)
 
 
 class SyntheticProviderConfig(_Model):
     seed: int = 20240101
     anchor: str = "2025-06-01T00:00:00Z"
     start_price: float = 3300.0
-    annual_vol: float = 0.16
+    annual_vol: float = 0.14
     vol_of_vol: float = 0.35
     vol_persistence_minutes: float = 720.0
-    drift_persistence_minutes: float = 240.0
-    drift_strength: float = 0.25
+    drift_persistence_minutes: float = 60.0
+    drift_strength: float = 0.10
     base_spread: float = 0.25
     missing_rate: float = Field(0.0, ge=0.0, lt=1.0)
     fx_start_rate: float = 0.655
