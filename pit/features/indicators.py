@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import numpy as np
 from numpy.lib.stride_tricks import sliding_window_view
-from scipy.signal import lfilter, lfiltic
+from scipy.signal import lfilter
 
 
 def true_range(high: np.ndarray, low: np.ndarray, close: np.ndarray) -> np.ndarray:
@@ -57,8 +57,9 @@ def ema_series(values: np.ndarray, period: int) -> np.ndarray | None:
     rest = values[period:]
     if rest.size == 0:
         return np.array([seed])
-    b, a = [alpha], [1.0, alpha - 1.0]
-    tail = lfilter(b, a, rest, zi=lfiltic(b, a, [seed]))[0]
+    # y[n] = alpha*x[n] + (1-alpha)*y[n-1]; for this first-order filter the initial state is
+    # zi = (1-alpha) * y[-1] with y[-1] = seed.
+    tail = lfilter([alpha], [1.0, alpha - 1.0], rest, zi=[(1.0 - alpha) * seed])[0]
     return np.concatenate([[seed], tail])
 
 
