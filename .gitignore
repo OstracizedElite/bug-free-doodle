@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+build/
+dist/
+
+# Runtime data (databases, caches, logs) — never commit
+var/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.log
+
+# Credentials and local overrides
+.env
+config/local.yaml
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store

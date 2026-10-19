@@ -1,0 +1,226 @@
+# PIT — Predictive Intelligence Trading — default configuration.
+#
+# Layering (later wins): this file -> config/local.yaml (git-ignored, written by the
+# dashboard Settings page) -> file named by $PIT_CONFIG -> programmatic overrides.
+#
+# Every parameter that influences forecasts is hashed into the "config_version" stored
+# on each forecast, so any change produces a new, separately-evaluated configuration.
+# All thresholds below are INITIAL RESEARCH ASSUMPTIONS, not validated values.
+
+instrument:
+  symbol: "XAU/USD"
+  fx_symbol: "AUD/USD"          # used to convert USD P&L to the AUD paper account
+  price_decimals: 2
+
+data:
+  provider: synthetic           # synthetic | csv | twelvedata | oanda | massive
+  history_days: 100             # 1m history loaded for feature warm-up (12h EMA50 needs ~60 days)
+  stale_after_seconds: 180      # latest completed candle older than this => feed stale
+  poll_interval_seconds: 60
+  backfill_chunk_minutes: 5000
+  default_spread: 0.30          # USD/oz, ONLY used when a provider supplies no bid/ask; labelled 'assumed'
+  sanity:
+    min_price: 100.0
+    max_price: 50000.0
+    max_abs_1m_return: 0.03     # |log return| above this in one minute => candle flagged 'suspect'
+    max_spread_fraction: 0.01   # spread / price above this => candle flagged 'suspect'
+    suspect_lookback_minutes: 30  # any suspect candle this recent => forecast WAIT (data_quality)
+
+providers:
+  synthetic:
+    seed: 20240101
+    anchor: "2025-06-01T00:00:00Z"   # deterministic path starts here; must precede any requested data
+    start_price: 3300.0
+    annual_vol: 0.16
+    vol_of_vol: 0.35                 # stochastic volatility intensity
+    vol_persistence_minutes: 720     # half-life scale of volatility regimes
+    drift_persistence_minutes: 240   # half-life scale of trend regimes
+    drift_strength: 0.25             # trend drift as a fraction of per-minute volatility
+    base_spread: 0.25
+    missing_rate: 0.0                # probability of dropping a minute (tests gap handling)
+    fx_start_rate: 0.655             # synthetic AUD/USD
+  csv:
+    path: ""                         # CSV with columns ts,open,high,low,close[,bid_*,ask_*,spread,volume]
+    quote_convention: "provider_mid"
+    data_mode: historical
+    source_name: "csv"
+  twelvedata:
+    base_url: "https://api.twelvedata.com"
+    api_key_env: TWELVEDATA_API_KEY
+    requests_per_minute: 8
+    data_mode: live
+  oanda:
+    environment: practice            # practice | live (live = real-money account host; read-only use only)
+    api_key_env: OANDA_API_TOKEN
+    account_id_env: OANDA_ACCOUNT_ID
+    requests_per_minute: 120
+    data_mode: live
+  massive:
+    base_url: "https://api.massive.com"   # formerly api.polygon.io (same keys)
+    api_key_env: MASSIVE_API_KEY
+    requests_per_minute: 5
+    data_mode: delayed               # set to 'live' only on a real-time entitlement
+
+market:
+  timezone: "America/New_York"       # gold (spot/CFD) trading week is defined in New York time
+  week_open: "Sun 18:00"
+  week_close: "Fri 17:00"
+  daily_break_start: "17:00"
+  daily_break_end: "18:00"
+  holidays: []                       # ISO dates (New York) treated as fully closed, e.g. "2026-12-25"
+  sessions_utc:                      # labels used for analytics breakdowns (UTC hours, [start, end))
+    asia: [22, 7]
+    london: [7, 12]
+    overlap: [12, 16]
+    new_york: [16, 21]
+    late: [21, 22]
+
+features:
+  timeframes: ["1m", "5m", "15m", "30m", "60m", "4h", "12h"]
+  required_timeframes: ["1m", "5m", "15m", "60m"]
+  lookback_bars:                     # fixed windows => identical results live and in replay
+    "1m": 240
+    "5m": 200
+    "15m": 200
+    "30m": 200
+    "60m": 200
+    "4h": 120
+    "12h": 100
+  min_bars: 60                       # fewer completed bars => timeframe features unavailable
+  atr_period: 14
+  vol_window: 60                     # 1m log-return window for sigma
+  vol_baseline_bars: 96              # baseline TR window for volatility expansion ratio
+  ema_periods: [9, 21, 50]
+  sma_period: 20
+  slope_lag: 3
+  consistency_bars: 12
+  momentum_lookback_bars: 1          # momentum window = lookback_bars x timeframe
+  swing_left: 2
+  swing_right: 2
+  structure_timeframe: "15m"
+  structure_lookback_bars: 96
+  alignment_timeframes: ["5m", "15m", "60m"]
+  regime:
+    timeframe: "15m"
+    high_vol_ratio: 1.5
+    low_vol_ratio: 0.67
+    trend_slope_min: 0.05            # |EMA21 slope| in ATR per bar
+    consolidation_range_atr: 6.0     # range of last consistency_bars bars, in ATR, below => consolidating
+
+forecasting:
+  interval_minutes: 15
+  horizons: [60]                     # supported: 15, 30, 60, 120 (one forecast per horizon per slot)
+  thresholds:
+    up: 0.35
+    down: -0.35
+  weights:
+    m1: 0.10
+    m5: 0.20
+    m15: 0.25
+    trend60: 0.20
+    ma_alignment: 0.10
+    structure: 0.10
+    vol_consistency: 0.05
+  normalisation:
+    momentum_scale: 2.0              # c in tanh(z / c)
+    trend_sep_scale: 1.0
+    trend_slope_scale: 0.2
+    consistency_timeframe: "5m"
+  targets:
+    reference: "mid_close_1m"
+    atr_multiple: 0.75
+    spread_multiple: 2.0
+    alternative_atr_multiples: [0.5, 1.0, 1.5, 2.0]
+  wait:
+    max_spread_to_target: 0.35       # spread / target distance above this => WAIT
+    max_vol_ratio: 3.0               # extreme volatility expansion => WAIT
+    min_atr_to_spread: 1.5           # 1m ATR / spread below this => market too quiet => WAIT
+    max_conflict: 0.40               # weighted share of components opposing the score
+    conflict_min_magnitude: 0.10
+    block_session_close: true        # WAIT if the horizon crosses a market close
+  probability:
+    version: "phit-heuristic-v1"
+    score_coef: 2.0
+    score_pivot: 0.35
+    alignment_coef: 0.25
+    spread_coef: 1.0
+    min: 0.02
+    max: 0.98
+  confidence:
+    high_min_score: 0.60
+    high_min_phit: 0.60
+    medium_min_score: 0.45
+
+events:
+  file: "config/events.yaml"         # manually maintained, verified economic-event calendar
+  minutes_before: 30
+  minutes_after: 30
+
+evaluation:
+  version: "eval-v1"
+  stop_multiple: 1.0                 # hypothetical stop distance = stop_multiple x target distance
+  slippage: 0.05                     # USD/oz per fill, adverse
+  min_coverage: 0.90                 # share of expected market minutes required to declare a miss
+  ambiguity_policy: conservative     # same-candle stop+target => outcome 'ambiguous', P&L assumes stop first
+
+paper:
+  enabled: true
+  base_currency: AUD                 # AUD (requires AUD/USD data) | USD
+  initial_balance: 50000.0
+  leverage: 20.0                     # ASIC retail maximum for gold CFDs is 20:1
+  margin_closeout_level: 0.50        # close all when equity < 50% of margin used
+  risk_per_trade: 0.005              # 0.5% of equity at risk to the stop
+  max_notional_multiple: 5.0         # cap on position notional / equity
+  stop_multiple: 1.0                 # stop distance = stop_multiple x forecast target distance
+  max_daily_loss: 0.02
+  max_drawdown: 0.10
+  max_concurrent_positions: 1
+  allowed_sessions: ["asia", "london", "overlap", "new_york"]
+  min_confidence: "low"              # low | medium | high
+  slippage: 0.05                     # USD/oz per fill
+  commission_per_unit: 0.0           # USD/oz per side
+  units_step: 1.0                    # troy ounces
+  min_units: 1.0
+  fx_max_age_minutes: 60
+  financing:
+    long_annual_rate: 0.07
+    short_annual_rate: 0.03
+    rollover_time_ny: "17:00"
+
+llm:
+  enabled: false
+  provider: openai                   # openai | anthropic
+  model: "gpt-5-mini"
+  prompt_version: "llm-v1"
+  only_directional: true             # consult the LLM only when the deterministic signal is UP/DOWN
+  every_n_slots: 1
+  monthly_budget_usd: 20.0
+  max_output_tokens: 900
+  timeout_seconds: 45
+  allow_in_backtest: false           # LLMs may know historical prices => look-ahead bias
+  cache_responses: true
+  pricing_usd_per_mtok:              # VERIFY against provider price lists before enabling
+    "gpt-5-mini": {input: 0.25, output: 2.00}
+    "gpt-5": {input: 1.25, output: 10.00}
+    "claude-haiku-5-5": {input: 1.00, output: 5.00}
+    "claude-sonnet-5-5": {input: 3.00, output: 15.00}
+
+scheduler:
+  forecast_delay_seconds: 5          # wait for the slot's final candle to be ingested
+  grace_seconds: 90                  # later than this after a slot => slot recorded as missed
+  ingest_interval_seconds: 60
+  evaluation_interval_seconds: 300
+  paper_interval_seconds: 60
+  heartbeat_interval_seconds: 60
+  missed_slot_lookback_hours: 72
+
+costs:
+  monthly_budget_usd: 150.0
+  data_subscription_usd_per_month: 0.0   # enter the approved subscription cost for reporting
+
+database:
+  path: "var/pit.db"
+
+logging:
+  level: INFO
+  file: "var/logs/pit.log"

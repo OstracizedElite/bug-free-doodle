@@ -1,0 +1,14 @@
+# Verified economic-event restrictions.
+#
+# PIT does not invent or scrape economic events. Add only events you have verified
+# against an official source (e.g. BLS release calendar, Federal Reserve FOMC calendar).
+# During [time - minutes_before, time + minutes_after] new forecasts return WAIT with
+# reason "event_restriction". Times are UTC.
+#
+# Example:
+#   - name: "US Non-Farm Payrolls"
+#     time: "2026-11-06T13:30:00Z"
+#     source: "https://www.bls.gov/schedule/news_release/empsit.htm"
+#     minutes_before: 30      # optional, defaults to events.minutes_before
+#     minutes_after: 60       # optional, defaults to events.minutes_after
+events: []
