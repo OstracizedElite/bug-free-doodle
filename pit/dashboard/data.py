@@ -31,27 +31,27 @@ def scope() -> tuple[str, str]:
 
 
 @st.cache_data(ttl=15, show_spinner=False)
-def forecasts(_ctx_key: str, origin: str, run_id: str, limit: int | None = None) -> pd.DataFrame:
+def forecasts(ctx_key: str, origin: str, run_id: str, limit: int | None = None) -> pd.DataFrame:
     return ctx().forecasts.frame(origin=origin, run_id=run_id, limit=limit)
 
 
 @st.cache_data(ttl=15, show_spinner=False)
-def target_evaluations(_ctx_key: str, origin: str, run_id: str) -> pd.DataFrame:
+def target_evaluations(ctx_key: str, origin: str, run_id: str) -> pd.DataFrame:
     return ctx().forecasts.target_evaluations(origin, run_id)
 
 
 @st.cache_data(ttl=10, show_spinner=False)
-def candles(_ctx_key: str, instrument: str, source: str, start_min: int | None, end_min: int | None) -> pd.DataFrame:
+def candles(ctx_key: str, instrument: str, source: str, start_min: int | None, end_min: int | None) -> pd.DataFrame:
     return ctx().candles.load(instrument, source, start_min, end_min)
 
 
 @st.cache_data(ttl=30, show_spinner=False)
-def runs(_ctx_key: str) -> list[dict[str, Any]]:
+def runs(ctx_key: str) -> list[dict[str, Any]]:
     return ctx().research.runs()
 
 
 @st.cache_data(ttl=10, show_spinner=False)
-def sources(_ctx_key: str) -> list[dict[str, Any]]:
+def sources(ctx_key: str) -> list[dict[str, Any]]:
     return ctx().candles.sources()
 
 
