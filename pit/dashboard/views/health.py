@@ -82,6 +82,18 @@ def render() -> None:
         else:
             st.success(f"All {res['checked']} forecast records match their content hashes.")
 
+    st.subheader("LLM usage (this month)")
+    from pit.common.timeutils import iso, utcnow
+
+    month_start = utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    usage = ctx.llm_calls.usage(iso(month_start))
+    if usage.empty:
+        st.caption("No LLM calls this month" + ("" if ctx.settings.llm.enabled else " (LLM review is disabled)."))
+    else:
+        st.dataframe(usage, hide_index=True, width="stretch")
+        with st.expander("Recent LLM calls"):
+            st.dataframe(ctx.llm_calls.recent(50), hide_index=True, width="stretch")
+
     st.subheader("Monthly operating cost")
     cost = h["monthly_cost"]
     c1, c2, c3, c4 = st.columns(4)

@@ -199,18 +199,19 @@ llm:
   provider: openai                   # openai | anthropic
   model: "gpt-5-mini"
   prompt_version: "llm-v1"
-  only_directional: true             # consult the LLM only when the deterministic signal is UP/DOWN
   every_n_slots: 1
   monthly_budget_usd: 20.0
   max_output_tokens: 900
   timeout_seconds: 45
   allow_in_backtest: false           # LLMs may know historical prices => look-ahead bias
   cache_responses: true
-  pricing_usd_per_mtok:              # VERIFY against provider price lists before enabling
+  # USD per million tokens. VERIFY against the provider's current price list before enabling.
+  # A model without an entry is never called, because the monthly budget could not be enforced.
+  # To use Anthropic, add the chosen model's verified prices, e.g.
+  #   "claude-haiku-5-5": {input: <verified>, output: <verified>}
+  pricing_usd_per_mtok:
     "gpt-5-mini": {input: 0.25, output: 2.00}
     "gpt-5": {input: 1.25, output: 10.00}
-    "claude-haiku-5-5": {input: 1.00, output: 5.00}
-    "claude-sonnet-5-5": {input: 3.00, output: 15.00}
 
 scheduler:
   forecast_delay_seconds: 5          # wait for the slot's final candle to be ingested

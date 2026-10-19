@@ -106,3 +106,19 @@ def test_mirror_edge():
     assert e["n_pairs"] == 6
     assert e["primary_hit_rate"] == pytest.approx(5 / 6) and e["mirror_hit_rate"] == pytest.approx(3 / 6)
     assert e["edge"] == pytest.approx(2 / 6)
+
+
+def test_llm_filter_and_matched_comparison():
+    det = _frame(n=20, hit_rate=0.6)
+    det["direction"] = "UP"
+    assisted = det.copy()
+    assisted["model_type"] = "llm_assisted"
+    assisted["parent_forecast_id"] = det["forecast_id"]
+    assisted["forecast_id"] = det["forecast_id"] + "_llm"
+    assisted["direction"] = np.where(det["outcome_status"] == "hit", "UP", "WAIT")  # a prescient filter
+    det["parent_forecast_id"] = None
+    both = pd.concat([det, assisted], ignore_index=True)
+    lf = metrics.llm_filter_analysis(both).set_index("llm_decision")
+    assert lf.loc["accepted", "hit_rate"] == 1.0 and lf.loc["rejected", "hit_rate"] == 0.0
+    m = metrics.compare_matched(both)
+    assert set(m["model_type"]) == {"deterministic", "llm_assisted"}

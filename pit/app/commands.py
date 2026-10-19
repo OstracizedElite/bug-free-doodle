@@ -249,3 +249,28 @@ def cmd_verify(args: argparse.Namespace, ctx: AppContext) -> int:
     out = {"database": ctx.db.integrity_check(), "forecast_hashes": ctx.forecasts.verify_hashes()}
     _print(out)
     return 0 if not out["forecast_hashes"]["mismatched"] and out["database"]["integrity"] == "ok" else 1
+
+
+@command("llm-preview", "Show the exact LLM prompt for the latest live forecast (no API call, no cost)")
+def cmd_llm_preview(args: argparse.Namespace, ctx: AppContext) -> int:
+    from pit.forecasting.events import EventCalendar
+    from pit.forecasting.llm import prompt as P
+    from pit.forecasting.llm.schema import JSON_SCHEMA
+
+    row = ctx.forecasts.latest("live")
+    if row is None:
+        print("no live forecast yet; run `python -m pit forecast` first")
+        return 1
+    f = ctx.forecasts.get(row["forecast_id"])
+    events = EventCalendar.from_file(ctx.settings.resolve_path(ctx.settings.events.file), ctx.settings.events)
+    payload = P.build_input(f, None, events)
+    if f.snapshot_id:
+        from pit.forecasting.service import ForecastService
+
+        frames = ForecastService(ctx).load_frames(f.slot_min)
+        snap = ForecastService(ctx).forecaster.compute_features(frames, f.slot_min)
+        payload = P.build_input(f, snap, events)
+    _print({"prompt_version": P.PROMPT_VERSION, "system": P.SYSTEM_PROMPT,
+            "user": P.render_user_message(payload), "schema": JSON_SCHEMA,
+            "llm_enabled": ctx.settings.llm.enabled, "model": ctx.settings.llm.model})
+    return 0

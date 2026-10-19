@@ -358,7 +358,6 @@ class LLMConfig(_Model):
     provider: Literal["openai", "anthropic"] = "openai"
     model: str = "gpt-5-mini"
     prompt_version: str = "llm-v1"
-    only_directional: bool = True
     every_n_slots: int = Field(1, ge=1)
     monthly_budget_usd: float = Field(20.0, ge=0)
     max_output_tokens: int = 900

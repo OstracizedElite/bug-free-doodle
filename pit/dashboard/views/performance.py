@@ -145,6 +145,16 @@ def render() -> None:
     st.dataframe(cmp, hide_index=True, width="stretch")
     st.caption("Deterministic and LLM-assisted forecasts are stored separately. LLM-assisted results in backtests are "
                "not credible evidence (models may have seen historical prices); use live forward testing.")
+    scoped = fc[(fc["horizon_minutes"] == horizon) & fc["config_version"].isin(cfg_sel)]
+    matched = metrics.compare_matched(scoped, interval)
+    if not matched.empty:
+        st.markdown("**Matched slots only** (both models present)")
+        st.dataframe(matched, hide_index=True, width="stretch")
+        lf = metrics.llm_filter_analysis(scoped)
+        if not lf.empty:
+            st.markdown("**LLM filter value** (outcomes of deterministic signals the LLM accepted vs rejected)")
+            st.dataframe(lf, hide_index=True, width="stretch")
+            st.caption("If rejected signals hit as often and earn as much as accepted ones, the LLM adds no value.")
     st.subheader("Value of WAIT filters")
     wf = metrics.wait_filter_analysis(d)
     if not wf.empty:

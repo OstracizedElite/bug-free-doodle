@@ -88,3 +88,35 @@ def test_tampering_is_detectable(live):
         conn.execute("DROP TRIGGER trg_forecasts_no_update")
         conn.execute("UPDATE forecasts SET composite_score = 0.99 WHERE forecast_id = ?", (fid,))
     assert ctx.forecasts.verify_hashes()["mismatched"] == [fid]
+
+
+def test_llm_reviewer_failure_never_blocks_deterministic_forecast(live):
+    ctx, _ = live
+
+    class Exploding:
+        def review(self, result, frames):
+            raise RuntimeError("provider outage")
+
+    svc = ForecastService(ctx, llm_reviewer=Exploding())
+    out = svc.run_slot(to_epoch_min("2026-01-14T15:00:00Z"), NOW)
+    assert out.status == "created" and len(out.results) == 1
+    assert out.results[0].forecast.model_type == "deterministic"
+    assert ctx.db.scalar("SELECT COUNT(*) FROM api_errors WHERE component = 'llm'") == 1
+
+
+def test_llm_assisted_record_stored_alongside(live):
+    ctx, _ = live
+    from pit.forecasting.models import ForecastResult
+
+    class Mirror:  # stands in for an LLM that accepts everything
+        def review(self, result, frames):
+            f = result.forecast
+            a = f.model_copy(update={"forecast_id": f.forecast_id + "_llm", "model_type": "llm_assisted",
+                                     "parent_forecast_id": f.forecast_id, "content_hash": ""})
+            return ForecastResult(forecast=a, targets=[t.model_copy(update={"forecast_id": a.forecast_id})
+                                                       for t in result.targets])
+
+    out = ForecastService(ctx, llm_reviewer=Mirror()).run_slot(to_epoch_min("2026-01-14T15:00:00Z"), NOW)
+    types = sorted(r.forecast.model_type for r in out.results)
+    assert types == ["deterministic", "llm_assisted"]
+    assert ctx.db.scalar("SELECT COUNT(*) FROM forecasts WHERE parent_forecast_id IS NOT NULL") == 1

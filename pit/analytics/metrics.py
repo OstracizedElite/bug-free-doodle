@@ -328,3 +328,38 @@ def compare_models(df: pd.DataFrame, interval_minutes: int = 15) -> pd.DataFrame
             "expectancy_per_oz": s.get("expectancy_per_oz"), "profit_factor": s.get("profit_factor"),
         })
     return pd.DataFrame(rows)
+
+
+def compare_matched(df: pd.DataFrame, interval_minutes: int = 15) -> pd.DataFrame:
+    """Deterministic vs LLM-assisted on exactly the same slots (pairs linked by parent id).
+
+    LLM-assisted records are missing where the LLM was skipped or failed, so comparing all
+    records would mix different samples; this restricts both sides to matched pairs.
+    """
+    if df.empty or "llm_assisted" not in set(df["model_type"]):
+        return pd.DataFrame()
+    assisted = df[df["model_type"] == "llm_assisted"]
+    parents = set(assisted["parent_forecast_id"].dropna())
+    matched = pd.concat([df[df["forecast_id"].isin(parents)], assisted[assisted["parent_forecast_id"].isin(parents)]])
+    return compare_models(matched, interval_minutes)
+
+
+def llm_filter_analysis(df: pd.DataFrame) -> pd.DataFrame:
+    """Outcomes of deterministic signals the LLM accepted vs rejected.
+
+    If rejected signals perform as well as accepted ones, the LLM filter adds no value.
+    """
+    if df.empty or "llm_assisted" not in set(df["model_type"]):
+        return pd.DataFrame()
+    det = prepare(df[df["model_type"] == "deterministic"])
+    assisted = df[(df["model_type"] == "llm_assisted") & df["parent_forecast_id"].notna()]
+    link = assisted[["parent_forecast_id", "direction"]].rename(
+        columns={"parent_forecast_id": "forecast_id", "direction": "assisted_direction"})
+    j = det[det["is_directional"]].merge(link, on="forecast_id", how="inner")
+    if j.empty:
+        return pd.DataFrame()
+    j["llm_decision"] = np.where(j["assisted_direction"] == "WAIT", "rejected", "accepted")
+    return j.groupby("llm_decision").agg(
+        n=("forecast_id", "count"), hit_rate=("hit", "mean"), target_first_rate=("first", "mean"),
+        expectancy_per_oz=("pnl", "mean"), net_pnl_per_oz=("pnl", "sum"),
+    ).reset_index()

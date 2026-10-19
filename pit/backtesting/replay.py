@@ -133,10 +133,20 @@ class BacktestRunner:
             fctx = ForecastContext(origin="backtest", data_mode=data_mode, provider=self.source,
                                    quote_convention=quote_convention, instrument=instrument, run_id=run_id)
             slots = self.slots(start_min, end_min)
+            reviewer = None
+            if s.llm.enabled and s.llm.allow_in_backtest:
+                from pit.forecasting.llm.reviewer import LLMReviewer
+
+                reviewer = LLMReviewer.from_context(self.ctx)
+                log.warning("LLM review enabled in backtest: results are NOT credible evidence (look-ahead risk)")
             batch: list[ForecastResult] = []
             stored = 0
             for k, slot in enumerate(slots):
-                batch.extend(forecaster.forecast(frames, slot, fctx, created_at=from_epoch_min(slot)))
+                results = forecaster.forecast(frames, slot, fctx, created_at=from_epoch_min(slot))
+                if reviewer is not None:
+                    reviewer.record_clock = lambda slot=slot: from_epoch_min(slot)
+                    results += [r for r in (reviewer.review(res) for res in results) if r is not None]
+                batch.extend(results)
                 if len(batch) >= 500:
                     stored += self.ctx.forecasts.insert_many(batch, store_snapshot=self.store_snapshots)
                     batch = []
@@ -161,6 +171,7 @@ class BacktestRunner:
                 "validation_type": validation_type,
                 "warning": None if data_mode != "synthetic" else
                 "SYNTHETIC DATA - results are not evidence about real markets",
+                "llm_in_backtest": bool(s.llm.enabled and s.llm.allow_in_backtest),
             }
             account_id = None
             if paper and s.paper.enabled:
